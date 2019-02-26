@@ -12,3 +12,9 @@ A threshold may be set to allow fast rotation of the encoder to change the value
 This library works well with some of the lowest quality encoders with poor bounce response from mechanical wipers.
 
 Credit and thanks to John Main (best-microcontroller-projects.com) for his inspiration and information that allowed development of this library.
+
+To compile a program with source code called main.cpp to an executeable called test:
+
+`g++ -o test main.cpp ribanRotaryEncoder.cpp-lwiringPi -lpthread`
+
+(assuming libwiringPi.a (orlibwiringPi.so) and libpthread.a (or libpthread.o) are in lib path and includes are in include path).
