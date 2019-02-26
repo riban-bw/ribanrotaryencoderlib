@@ -17,4 +17,4 @@ To compile a program with source code called main.cpp to an executeable called t
 
 `g++ -o test main.cpp ribanRotaryEncoder.cpp-lwiringPi -lpthread`
 
-(assuming libwiringPi.a (orlibwiringPi.so) and libpthread.a (or libpthread.o) are in lib path and includes are in include path).
+(This assumes libwiringPi.a (orlibwiringPi.so) and libpthread.a (or libpthread.o) are in linker path andassociated header files are in include path. Use -I to specifiy additional inclue path and -L to specify additional linker paths as required.)
