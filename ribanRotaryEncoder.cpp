@@ -1,30 +1,30 @@
 /**	Rotary encoder class for Raspberry Pi
 	Copyright Brian Walton (brian@riban.co.uk) 2019
-	Credit to John Main (best-microcontroller-projects.com) for description of digital filter
-	Rotation faster than THRESHOLD change value at higher rate defined by SCALE
-	Depends on wiringPi - todo: remove this dependency
 */
 #include "ribanRotaryEncoder.h"
 #include <unistd.h> //provide usleep
 #include <poll.h> //provides poll
 #include <fcntl.h> //provides file open constants
 #include <cstdio>
-#include <wiringPi.h>
 #include <pthread.h> //Provides threading
+#include <time.h>
 
 static const int8_t anValid[16] = {0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0};
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 
-ribanRotaryEncoder::ribanRotaryEncoder(uint8_t clk, uint8_t data)
+ribanRotaryEncoder::ribanRotaryEncoder(uint8_t clk, uint8_t data, uint8_t button)
 {
     //Configure GPIO
-    wiringPiSetupGpio();
     m_nClk = clk;
     m_nData = data;
-    pinMode(clk, INPUT);
-    pullUpDnControl(clk, PUD_UP);
-    pinMode(data, INPUT);
-    pullUpDnControl(data, PUD_UP);
+    m_nButton = button;
+    m_nLastButtonPress = clock();
+    for(int i = 0; i < MAX_GPI; ++i)
+        m_fdGpi[i] = -1;
+    m_nDebounce = 50;
+    configureGpi(clk, GPI_INPUT | GPI_PULLUP);
+    configureGpi(data, GPI_INPUT | GPI_PULLUP);
+    configureGpi(button, GPI_INPUT | GPI_PULLUP);
     //Initialise encoder registers
     SetValue(0);
     SetMin(-100);
@@ -40,6 +40,7 @@ ribanRotaryEncoder::~ribanRotaryEncoder()
 {
     m_bPoll = false;
     usleep(1000); //Wait for last iteration of encoder (if running)
+    unconfigureGpi();
 }
 
 void ribanRotaryEncoder::SetThreshold(int8_t threshold)
@@ -99,6 +100,19 @@ int32_t ribanRotaryEncoder::GetMax()
     return m_lMax;
 }
 
+bool ribanRotaryEncoder::GetButton()
+{
+    if(clock() < m_nLastButtonPress + m_nDebounce)
+        return false;
+    m_nLastButtonPress = clock();
+    return readGpi(m_nButton);
+}
+
+void ribanRotaryEncoder::SetDebounce(int debounce)
+{
+    m_nDebounce = debounce;;
+}
+
 void *ribanRotaryEncoder::getPoll(void *context)
 {
     return ((ribanRotaryEncoder*)context)->pollEnc();
@@ -113,7 +127,7 @@ void *ribanRotaryEncoder::pollEnc()
     uint8_t nEncCode = 0; //2-bit word (CLK DATA)
     uint8_t nEncHist = 0; //4-bit history of last two 2-bit words
     int8_t nDir = 0; //Direction of rotation [-1, 0, +1]
-    uint32_t lTime = millis(); //Time of last encoder pulse used for fast scroll detection
+    uint32_t lTime = clock(); //Time of last encoder pulse used for fast scroll detection
     int fd = -1; //File descriptor of GPIO sysfs device to monitor for change
     char fPath[30]; //Holds path to GPIO device/value
     sprintf (fPath, "/sys/class/gpio/gpio%d/value", m_nClk);
@@ -140,9 +154,9 @@ void *ribanRotaryEncoder::pollEnc()
         {
             // Create 4-bit word representing previous and current CLK and DATA states
             nEncCode <<= 2;
-            if(digitalRead(m_nData))
+            if(readGpi(m_nData))
                 nEncCode |= 0x02;
-            if(digitalRead(m_nClk))
+            if(readGpi(m_nClk))
                 nEncCode |= 0x01;
             nEncCode &= 0x0f;
 
@@ -157,7 +171,7 @@ void *ribanRotaryEncoder::pollEnc()
                     ++nDir;
                 if(nDir)
                 {
-                    uint32_t lNow = millis();
+                    uint32_t lNow = clock(); //wiringPi
                     pthread_mutex_lock(&mutex1);
                     if(lNow >= lTime + m_nThreshold)
                         m_lValue += nDir; //Slow rotation
@@ -175,4 +189,53 @@ void *ribanRotaryEncoder::pollEnc()
             usleep(1000);
         }
     }
+}
+
+bool ribanRotaryEncoder::configureGpi(uint8_t gpi, uint8_t flags)
+{
+    if(gpi >= MAX_GPI)
+        return false;
+    FILE *fd;
+    char sFname[64];
+    if((fd = fopen("/sys/class/gpio/export", "w")) == NULL)
+        return false;
+    fprintf(fd, "%d\n", gpi);
+    fclose(fd);
+    sprintf(sFname, "/sys/class/gpio/gpio%d/direction", gpi);
+    if((fd = fopen(sFname, "w")) == NULL)
+        return false;
+    fprintf(fd, (flags & 1)?"out\n":"in\n");
+    fprintf(fd, (flags & 2)?"high\n":"low\n"); //!@todo Validate that this actually does pull-up
+    fclose(fd);
+    sprintf(sFname, "/sys/class/gpio/gpio%d/value", gpi);
+    if((m_fdGpi[gpi] = open(sFname, O_RDWR)) < 0)
+        return false;
+    return true;
+}
+
+void ribanRotaryEncoder::unconfigureGpi()
+{
+    //!@todo Allow unconfigure of each GPI separately
+    for(int i = 0; i < MAX_GPI; ++i)
+        if(m_fdGpi[i] != -1)
+           close(m_fdGpi[i]);
+    FILE *fd;
+    char sFname[64];
+    if((fd = fopen("/sys/class/gpio/unexport", "w")) == NULL)
+        return;
+    fprintf(fd, "%d\n", m_nClk);
+    fprintf(fd, "%d\n", m_nData);
+    if(m_nButton != -1)
+        fprintf(fd, "%d\n", m_nButton);
+    fclose(fd);
+}
+
+bool ribanRotaryEncoder::readGpi(uint8_t gpi)
+{
+    if(gpi > MAX_GPI || m_fdGpi[gpi] < 0)
+        return false;
+    char c;
+    //lseek(fd, 0L, SEEK_SET);
+    read(m_fdGpi[gpi], &c, 1);
+    return(c == '1');
 }
