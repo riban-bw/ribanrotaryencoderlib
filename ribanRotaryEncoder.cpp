@@ -17,38 +17,50 @@
 static const uint32_t GPIO_BASE_V1 = 0x20200000; // Physical base address of GPIO registers RPi V1
 static const uint32_t GPIO_BASE_V2 = 0x3F200000; // Physical base address of GPIO registers Rpi V2,V3
 static const int8_t anValid[16] = {0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0}; //Table of valid encoder states
+static const int8_t anUnavailableGpi[MAX_GPI] = {0,0,0,0,0,0,0,0,0,0,
+                                                0,0,0,0,0,0,0,0,0,0,
+                                                0,0,0,0,0,0,0,0,0,0,
+                                                0,0,0,0,0,0,0,0,0,0,
+                                                0,0,0,0,0,0,0,0,0,0,
+                                                0,0,0,0}; //Table of unavailable GPI pins
 
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 
 ribanRotaryEncoder::ribanRotaryEncoder(uint8_t clk, uint8_t data, uint8_t button)
 {
+    m_bUnInit = true;
     //Configure GPIO
     m_nClk = clk;
     m_nData = data;
     m_nButton = button;
-    m_nLastButtonPress = clock();
-    m_nDebounce = 50;
-    if(!initgpi())
-        exit(1);
-    ConfigureGpi(clk, GPI_INPUT_PULLUP);
-    ConfigureGpi(data, GPI_INPUT_PULLUP);
-    ConfigureGpi(button, GPI_INPUT_PULLUP);
+    m_nLastButtonPress = GetMillis();
+    m_nDebounce = 50000;
     //Initialise encoder registers
     SetValue(0);
     SetMin(-100);
     SetMax(100);
     SetThreshold(0);
     SetScale(1);
-    m_bPoll = true;
-    pthread_t threadPoll;
-    pthread_create(&threadPoll, NULL, &ribanRotaryEncoder::getPoll, this);
+    if(initgpi())
+    {
+        ConfigureGpi(clk, GPI_INPUT_PULLUP);
+        ConfigureGpi(data, GPI_INPUT_PULLUP);
+        ConfigureGpi(button, GPI_INPUT_PULLUP);
+        m_bPoll = true;
+        pthread_t threadPoll;
+        pthread_create(&threadPoll, NULL, &ribanRotaryEncoder::getPoll, this);
+        m_bButton = GetGpi(m_nButton);
+    }
 }
 
 ribanRotaryEncoder::~ribanRotaryEncoder()
 {
-    m_bPoll = false;
-    usleep(1000); //Wait for last iteration of encoder (if running)
-    uninitgpi();
+    if(!m_bUnInit)
+    {
+        m_bPoll = false;
+        usleep(1000); //Wait for last iteration of encoder (if running)
+        uninitgpi();
+    }
 }
 
 void ribanRotaryEncoder::SetThreshold(int8_t threshold)
@@ -73,15 +85,19 @@ int32_t ribanRotaryEncoder::GetScale()
 
 void ribanRotaryEncoder::SetValue(int32_t value)
 {
+    pthread_mutex_lock(&mutex1);
     m_lValue = value;
+    pthread_mutex_unlock(&mutex1);
 }
 
 int32_t ribanRotaryEncoder::GetValue(bool reset)
 {
+    pthread_mutex_lock(&mutex1);
     int32_t lValue = m_lValue;
     if(reset)
         m_lValue = 0;
     return lValue;
+    pthread_mutex_unlock(&mutex1);
 }
 
 void ribanRotaryEncoder::SetMin(int32_t min)
@@ -108,12 +124,14 @@ int32_t ribanRotaryEncoder::GetMax()
     return m_lMax;
 }
 
-bool ribanRotaryEncoder::GetButton()
+bool ribanRotaryEncoder::IsButtonPressed()
 {
-    if(clock() < m_nLastButtonPress + m_nDebounce)
-        return false;
-    m_nLastButtonPress = clock();
-    return GetGpi(m_nButton);
+    if(GetMillis() > m_nLastButtonPress + m_nDebounce)
+    {
+        m_nLastButtonPress = GetMillis();
+        m_bButton = GetGpi(m_nButton);
+    }
+    return m_bButton;
 }
 
 void ribanRotaryEncoder::SetDebounce(int debounce)
@@ -135,7 +153,7 @@ void *ribanRotaryEncoder::pollEnc()
     uint8_t nEncCode = 0; //2-bit word (CLK DATA)
     uint8_t nEncHist = 0; //4-bit history of last two 2-bit words
     int8_t nDir = 0; //Direction of rotation [-1, 0, +1]
-    uint32_t lTime = clock(); //Time of last encoder pulse used for fast scroll detection
+    uint32_t lTime = GetMillis(); //Time of last encoder pulse used for fast scroll detection
 
     while(m_bPoll)
     {
@@ -164,7 +182,7 @@ void *ribanRotaryEncoder::pollEnc()
                     ++nDir;
                 if(nDir)
                 {
-                    uint32_t lNow = clock(); //wiringPi
+                    uint32_t lNow = GetMillis(); //wiringPi
                     pthread_mutex_lock(&mutex1);
                     if(lNow >= lTime + m_nThreshold)
                         m_lValue += nDir; //Slow rotation
@@ -185,14 +203,14 @@ void *ribanRotaryEncoder::pollEnc()
 
 bool ribanRotaryEncoder::GetGpi(uint8_t gpi)
 {
-    if(gpi > MAX_GPI)
+    if(m_bUnInit || gpi > MAX_GPI || anUnavailableGpi[gpi])
         return false;
     return(((*(m_pGpiMap + 13 + gpi / 32)) & (1 << (gpi % 32))) != 0);
 }
 
 void ribanRotaryEncoder::SetGpi(uint8_t gpi, bool value)
 {
-    if(gpi > MAX_GPI)
+    if(m_bUnInit || gpi > MAX_GPI || anUnavailableGpi[gpi])
         return;
     if(value)
         *(m_pGpiMap + 7) = 1 << gpi;
@@ -202,7 +220,7 @@ void ribanRotaryEncoder::SetGpi(uint8_t gpi, bool value)
 
 bool ribanRotaryEncoder::ConfigureGpi(uint8_t gpi, uint8_t flags)
 {
-    if(gpi >= MAX_GPI)
+    if(m_bUnInit || gpi > MAX_GPI || anUnavailableGpi[gpi])
         return false;
     /*  There are 10 GPI configurations per register. Registers start at GPIO_BASE
         Each configuration consists of three bits
@@ -246,11 +264,23 @@ uint8_t ribanRotaryEncoder::GetModelNumber()
     std::string sModel = GetModel();
     if(sModel.length() > 13)
     {
-        uint8_t nModel = sModel[13] - 48;
+        uint8_t nModel = sModel[13] - 48; //!@todo Validate GetModelNumber works for each type of Raspberry Pi
         if(nModel < 10)
             return nModel;
     }
     return -1;
+}
+
+bool ribanRotaryEncoder::IsInit()
+{
+    return !m_bUnInit;
+}
+
+uint32_t ribanRotaryEncoder::GetMillis()
+{
+    timespec ts;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+    return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
 bool ribanRotaryEncoder::initgpi()
@@ -269,6 +299,7 @@ bool ribanRotaryEncoder::initgpi()
         return false;
     }
     m_pGpiMap = (volatile uint32_t *)m_pMap;
+    m_bUnInit = false;
     return true;
 }
 
@@ -276,4 +307,5 @@ void ribanRotaryEncoder::uninitgpi()
 {
     munmap(m_pMap, BLOCK_SIZE);
     close(m_fdGpi);
+    m_bUnInit = true;
 }

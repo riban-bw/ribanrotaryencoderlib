@@ -11,6 +11,7 @@
 #include <stdint.h> //Provides fixed length integer types
 #include <string> //Provides std::string
 
+//GOI modes
 #define GPI_INPUT           0x00
 #define GPI_INPUT_PULLDOWN  0x01
 #define GPI_INPUT_PULLUP    0x02
@@ -82,7 +83,7 @@ class ribanRotaryEncoder
         /** @brief  Get button value
         *   @retval bool True if button pressed
         */
-        bool GetButton();
+        bool IsButtonPressed();
 
         /** @brief Set the button debounce period
         *   @param  debounce Quantity of milliseconds to ignore button after last press
@@ -118,26 +119,38 @@ class ribanRotaryEncoder
         */
         uint8_t GetModelNumber();
 
+        /** @brief  Is library initialised?
+        *   @retval bool True if library is initialised
+        */
+        bool IsInit();
+
+        /** @brief  Get the quantity of milliseconds since 32-bit day epoch
+        *   @retval uint_32 Quantity of milliseconds (wraps every 49 days)
+        */
+        uint32_t GetMillis();
+
         static void *getPoll(void *context); //Get pointer to encoder poll function
         void *pollEnc(); // Polls encoder (run as separate thread)
 
     protected:
 
     private:
-        bool initgpi(); //Initialises GPI
+        bool initgpi(); //Initialises GPI returns true on success
         void uninitgpi(); //Uninitalises GPI
         bool m_bPoll; // True to enable polling
         uint8_t m_nClk; // GPIO pin connected to encoder clock
         uint8_t m_nData; // GPIO pin connected to encoder data
         uint8_t m_nButton; // GPIO pin connected to button
-        int8_t m_nThreshold;
-        int32_t m_nScale;
+        int8_t m_nThreshold; // Threshold of slow / fast rotation
+        int32_t m_nScale; // Scaling factor for fast rotation
         int32_t m_lValue; // Current absolute value
         int32_t m_lMin; // Minimum permissible value
         int32_t m_lMax; // Maximum permissible value
         int m_nLastButtonPress; // Time of last button press (for debounce)
         int m_nDebounce; // Quantity of milliseconds to ignore button after last press
         int m_fdGpi; // File descriptor of GPI memory map
-        void * m_pMap;
+        void * m_pMap; // Memory map of GPI area
         volatile uint32_t * m_pGpiMap; //Pointer to GPI map
+        bool m_bUnInit; // False when initialised
+        bool m_bButton; // Current button state
 };
