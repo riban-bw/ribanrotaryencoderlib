@@ -34,7 +34,7 @@ ribanRotaryEncoder::ribanRotaryEncoder(uint8_t clk, uint8_t data, uint8_t button
     m_nData = data;
     m_nButton = button;
     m_nLastButtonPress = GetMillis();
-    m_nDebounce = 50000;
+    m_nDebounce = 50;
     //Initialise encoder registers
     SetValue(0);
     SetMin(-100);
@@ -49,7 +49,7 @@ ribanRotaryEncoder::ribanRotaryEncoder(uint8_t clk, uint8_t data, uint8_t button
         m_bPoll = true;
         pthread_t threadPoll;
         pthread_create(&threadPoll, NULL, &ribanRotaryEncoder::getPoll, this);
-        m_bButton = GetGpi(m_nButton);
+        m_bButton = !GetGpi(m_nButton); //Invert button because button is pulled up
     }
 }
 
@@ -85,19 +85,15 @@ int32_t ribanRotaryEncoder::GetScale()
 
 void ribanRotaryEncoder::SetValue(int32_t value)
 {
-    pthread_mutex_lock(&mutex1);
     m_lValue = value;
-    pthread_mutex_unlock(&mutex1);
 }
 
 int32_t ribanRotaryEncoder::GetValue(bool reset)
 {
-    pthread_mutex_lock(&mutex1);
     int32_t lValue = m_lValue;
     if(reset)
-        m_lValue = 0;
+        SetValue(0);
     return lValue;
-    pthread_mutex_unlock(&mutex1);
 }
 
 void ribanRotaryEncoder::SetMin(int32_t min)
@@ -129,7 +125,7 @@ bool ribanRotaryEncoder::IsButtonPressed()
     if(GetMillis() > m_nLastButtonPress + m_nDebounce)
     {
         m_nLastButtonPress = GetMillis();
-        m_bButton = GetGpi(m_nButton);
+        m_bButton = !GetGpi(m_nButton); //Invert value because button is pulled up
     }
     return m_bButton;
 }
@@ -285,13 +281,13 @@ uint32_t ribanRotaryEncoder::GetMillis()
 
 bool ribanRotaryEncoder::initgpi()
 {
-    if((m_fdGpi = open("/dev/mem", O_RDWR|O_SYNC) ) < 0) //!@todo Only root can access /dev/mem
+    if((m_fdGpi = open("/dev/gpiomem", O_RDWR|O_SYNC) ) < 0) //!@todo Only root can access /dev/mem
     {
-        printf("Error: Can't open /dev/mem \n"); //!@todo Remove debug message
+        printf("Error: Can't open /dev/gpiomem \n"); //!@todo Remove debug message
         return false;
     }
 
-    m_pMap = mmap(NULL, BLOCK_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, m_fdGpi, (GetModelNumber() == 1) ? GPIO_BASE_V1:GPIO_BASE_V2);
+    m_pMap = mmap(NULL, BLOCK_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, m_fdGpi, 0);
     if(m_pMap == MAP_FAILED)
     {
         printf("mmap error %d\n", (int)m_pMap);//!@todo Remove debug message

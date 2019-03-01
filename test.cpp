@@ -14,7 +14,7 @@
 
 int main(int argc, char* argv[])
 {
-    uint32_t lValue = -1;
+    int32_t lValue = -1;
     printf("riban Rotary Encoder test\n");
     ribanRotaryEncoder enc(CLK, DATA, BUTTON);
     printf("Encoder library %sinitialised\n", enc.IsInit()?"":"not ");
@@ -52,14 +52,15 @@ int main(int argc, char* argv[])
         lValue = enc.GetValue(true);
         if(lValue > 0)
             printf("Clockwise\n");
-        if(lValue < 1)
+        if(lValue < 0)
             printf("Counter-clockwise\n");
+        usleep(1000); //Avoid 100% CPU
     }
     while(enc.IsButtonPressed()); //Wait for button release
     printf("Flash LED. Press button to move to next test\n");
+    enc.ConfigureGpi(LED, GPI_OUTPUT);
     while(enc.IsButtonPressed() == false)
     {
-        enc.ConfigureGpi(LED, GPI_OUTPUT);
         enc.SetGpi(LED, true);
         usleep(500000);
         enc.SetGpi(LED, false);
