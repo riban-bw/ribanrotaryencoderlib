@@ -35,7 +35,7 @@ ribanRotaryEncoder::ribanRotaryEncoder(uint8_t clk, uint8_t data, uint8_t button
     m_nClk = clk;
     m_nData = data;
     m_nButton = button;
-    m_nLastButtonPress = GetMillis();
+    m_nLastButtonPress = 0;
     m_nDebounce = 50;
     //Initialise encoder registers
     SetValue(0);
@@ -61,7 +61,7 @@ ribanRotaryEncoder::~ribanRotaryEncoder()
     if(!m_bUnInit)
     {
         m_bPoll = false;
-        usleep(1000); //Wait for last iteration of encoder (if running)
+        usleep(2000); //Wait for last iteration of encoder (if running)
         uninitgpi();
     }
 }
@@ -186,9 +186,9 @@ void *ribanRotaryEncoder::pollEnc()
             {
                 nEncHist <<= 4;
                 nEncHist |= nEncCode;
-                if(nEncHist==0x2b)
+                if(nEncHist == 0x2b)
                     --nDir;
-                else if(nEncHist==0x17)
+                else if(nEncHist == 0x17)
                     ++nDir;
                 if(nDir)
                 {
@@ -268,6 +268,8 @@ uint32_t ribanRotaryEncoder::GetMillis()
 
 bool ribanRotaryEncoder::initgpi()
 {
+    if(IsInit())
+        return true;
     int fd;
     if((fd = open("/dev/gpiomem", O_RDWR|O_SYNC) ) < 0)
         return false;
@@ -278,7 +280,7 @@ bool ribanRotaryEncoder::initgpi()
         m_pGpiMap = (volatile uint32_t *)m_pMap;
         m_bUnInit = false;
     }
-    return m_bUnInit;
+    return !m_bUnInit;
 }
 
 void ribanRotaryEncoder::uninitgpi()
