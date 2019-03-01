@@ -66,11 +66,16 @@ int main(int argc, char* argv[])
     enc.SetMin(100);
     enc.SetValue(500);
     enc.SetThreshold(10);
-    enc.SetScale(10);
+    enc.SetScale(100);
     enc.SetMultiplier(-10);
     while(enc.IsButtonPressed() == false)
     {
-        if(enc.GetMillis() > lLastTime + enc.GetValue())
+        if(enc.GetValue() != lValue)
+        {
+          lValue = enc.GetValue();
+          printf("Blink rate: %0.2f pps, interval: %dms\n", 500/(float)lValue, lValue * 2);
+        }
+        if(enc.GetMillis() > lLastTime + lValue)
         {
           bBlink = !bBlink;
           enc.SetGpi(LED, bBlink);
