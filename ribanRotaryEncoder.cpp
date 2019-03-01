@@ -41,6 +41,7 @@ ribanRotaryEncoder::ribanRotaryEncoder(uint8_t clk, uint8_t data, uint8_t button
     SetMax(100);
     SetThreshold(0);
     SetScale(1);
+    SetMultiplier(1);
     if(initgpi())
     {
         ConfigureGpi(clk, GPI_INPUT_PULLUP);
@@ -85,7 +86,9 @@ int32_t ribanRotaryEncoder::GetScale()
 
 void ribanRotaryEncoder::SetValue(int32_t value)
 {
+    pthread_mutex_lock(&mutex1);
     m_lValue = value;
+    pthread_mutex_unlock(&mutex1);
 }
 
 int32_t ribanRotaryEncoder::GetValue(bool reset)
@@ -99,8 +102,8 @@ int32_t ribanRotaryEncoder::GetValue(bool reset)
 void ribanRotaryEncoder::SetMin(int32_t min)
 {
     m_lMin = min;
-    if(m_lValue < min)
-        m_lValue = min;
+    if(GetValue() < min)
+        SetValue(min);
 }
 
 int32_t ribanRotaryEncoder::GetMin()
@@ -111,13 +114,23 @@ int32_t ribanRotaryEncoder::GetMin()
 void ribanRotaryEncoder::SetMax(int32_t max)
 {
     m_lMax = max;
-    if(m_lValue > max)
-        m_lMax = max;
+    if(GetValue() > max)
+       SetValue(max);
 }
 
 int32_t ribanRotaryEncoder::GetMax()
 {
     return m_lMax;
+}
+
+void ribanRotaryEncoder::SetMultiplier(int32_t multiplier)
+{
+    m_lMultiplier = multiplier;
+}
+
+int32_t ribanRotaryEncoder::GetMultiplier()
+{
+    return m_lMultiplier;
 }
 
 bool ribanRotaryEncoder::IsButtonPressed()
@@ -181,9 +194,9 @@ void *ribanRotaryEncoder::pollEnc()
                     uint32_t lNow = GetMillis(); //wiringPi
                     pthread_mutex_lock(&mutex1);
                     if(lNow >= lTime + m_nThreshold)
-                        m_lValue += nDir; //Slow rotation
+                        m_lValue += nDir * m_lMultiplier; //Slow rotation
                     else
-                        m_lValue += nDir * m_nScale; //Fast rotation
+                        m_lValue += nDir * m_lMultiplier * m_nScale; //Fast rotation
                     lTime = lNow;
                     if(m_lValue > m_lMax)
                         m_lValue = m_lMax;

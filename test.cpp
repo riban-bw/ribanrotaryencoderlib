@@ -60,14 +60,24 @@ int main(int argc, char* argv[])
     while(enc.IsButtonPressed()); //Wait for button release
     printf("Flash LED. Press button to move to next test\n");
     enc.ConfigureGpi(LED, GPI_OUTPUT);
+    bool bBlink = false;
+    uint32_t lLastTime = enc.GetMillis();
+    enc.SetMax(5000);
+    enc.SetMin(100);
+    enc.SetValue(500);
+    enc.SetThreshold(10);
+    enc.SetScale(10);
+    enc.SetMultiplier(-10);
     while(enc.IsButtonPressed() == false)
     {
-        enc.SetGpi(LED, true);
-        usleep(500000);
-        enc.SetGpi(LED, false);
-        usleep(500000);
+        if(enc.GetMillis() > lLastTime + enc.GetValue())
+        {
+          bBlink = !bBlink;
+          enc.SetGpi(LED, bBlink);
+          lLastTime = enc.GetMillis();
+        }
+        usleep(1000); //Avoid 100% CPU
     }
-    printf("No more tests. Press button to end\n");
-    while(enc.IsButtonPressed() == false);
+    printf("End of tests\n");
     return 0;
 }

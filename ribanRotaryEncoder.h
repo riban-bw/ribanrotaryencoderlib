@@ -80,6 +80,17 @@ class ribanRotaryEncoder
         */
         int32_t GetMax();
 
+        /** @brief  Set the increment multiplier
+        *   @param  multiplier Value to multiply increment by
+        *   @note   Set to negative value to reverse rotation direction
+        */
+        void SetMultiplier(int32_t multiplier);
+        
+        /** @brief  Get increment multiplier
+        *   @retval int32_t Multiplier value
+        */
+        int32_t GetMultiplier();
+
         /** @brief  Get button value
         *   @retval bool True if button pressed
         */
@@ -146,6 +157,7 @@ class ribanRotaryEncoder
         int32_t m_lValue; // Current absolute value
         int32_t m_lMin; // Minimum permissible value
         int32_t m_lMax; // Maximum permissible value
+        int32_t m_lMultiplier; // Increment multiplier value
         int m_nLastButtonPress; // Time of last button press (for debounce)
         int m_nDebounce; // Quantity of milliseconds to ignore button after last press
         int m_fdGpi; // File descriptor of GPI memory map
