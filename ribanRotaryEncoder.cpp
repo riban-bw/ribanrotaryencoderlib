@@ -5,26 +5,28 @@
 #include <unistd.h> //provide usleep
 #include <poll.h> //provides poll
 #include <fcntl.h> //provides file open constants
-#include <cstdio>
-#include <cstdlib> //provides exit
+//#include <cstdio> //provides printf (enable for debug)
 #include <pthread.h> //Provides threading
 #include <time.h> //provides clock
 #include <sys/mman.h> //provides mmap
 
 #define MAX_GPI     54
 #define BLOCK_SIZE  (1024 * 4)
+#define GPSET0      7
+#define GPCLR0      10
+#define GPLEV0      13
+#define GPPUD       37
+#define GPPUDCLK0   38
 
-static const uint32_t GPIO_BASE_V1 = 0x20200000; // Physical base address of GPIO registers RPi V1
-static const uint32_t GPIO_BASE_V2 = 0x3F200000; // Physical base address of GPIO registers Rpi V2,V3
 static const int8_t anValid[16] = {0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0}; //Table of valid encoder states
 static const int8_t anUnavailableGpi[MAX_GPI] = {1,1,0,0,0,0,0,0,0,0,
                                                 0,0,0,0,0,0,0,0,0,0,
-                                                0,0,0,0,0,0,0,0,1,1,
-                                                1,1,1,1,1,1,1,1,1,1,
+                                                0,0,0,0,0,0,0,0,0,0,
+                                                0,0,1,1,1,1,1,1,1,1,
                                                 1,1,1,1,1,1,1,1,1,1,
                                                 1,1,1,1}; //Table of unavailable GPI pins
 
-pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER; //Initialise mutex for thread safety
 
 ribanRotaryEncoder::ribanRotaryEncoder(uint8_t clk, uint8_t data, uint8_t button)
 {
@@ -166,9 +168,8 @@ void *ribanRotaryEncoder::pollEnc()
 
     while(m_bPoll)
     {
-        // Wait for clock signal
-        while(!GetGpi(m_nClk))
-            usleep(1000);
+        while(!GetGpi(m_nClk)) // Wait for clock signal avoiding 100% CPU (check every 1ms)
+            usleep(1000); //!@todo Can we use edge detection?
         nDir = 0;
         while(nDir == 0)
         {
@@ -191,7 +192,7 @@ void *ribanRotaryEncoder::pollEnc()
                     ++nDir;
                 if(nDir)
                 {
-                    uint32_t lNow = GetMillis(); //wiringPi
+                    uint32_t lNow = GetMillis();
                     pthread_mutex_lock(&mutex1);
                     if(lNow >= lTime + m_nThreshold)
                         m_lValue += nDir * m_lMultiplier; //Slow rotation
@@ -205,7 +206,7 @@ void *ribanRotaryEncoder::pollEnc()
                     pthread_mutex_unlock(&mutex1);
                 }
             }
-            usleep(1000);
+            usleep(1000); //Avoid 100% CPU and debounce encoder wipers
         }
     }
 }
@@ -214,7 +215,7 @@ bool ribanRotaryEncoder::GetGpi(uint8_t gpi)
 {
     if(m_bUnInit || gpi > MAX_GPI || anUnavailableGpi[gpi])
         return false;
-    return(((*(m_pGpiMap + 13 + gpi / 32)) & (1 << (gpi % 32))) != 0);
+    return(((*(m_pGpiMap + GPLEV0 + gpi / 32)) & (1 << (gpi % 32))) != 0);
 }
 
 void ribanRotaryEncoder::SetGpi(uint8_t gpi, bool value)
@@ -222,9 +223,9 @@ void ribanRotaryEncoder::SetGpi(uint8_t gpi, bool value)
     if(m_bUnInit || gpi > MAX_GPI || anUnavailableGpi[gpi])
         return;
     if(value)
-        *(m_pGpiMap + 7) = 1 << gpi;
+        *(m_pGpiMap + GPSET0) = 1 << gpi;
     else
-        *(m_pGpiMap + 10) = 1 << gpi;
+        *(m_pGpiMap + GPCLR0) = 1 << gpi;
 }
 
 bool ribanRotaryEncoder::ConfigureGpi(uint8_t gpi, uint8_t flags)
@@ -244,40 +245,13 @@ bool ribanRotaryEncoder::ConfigureGpi(uint8_t gpi, uint8_t flags)
         return true;
     }
     //Set pull-up/down flags then clock into selected pin
-    *(m_pGpiMap + 37) = flags & 0x03;
+    *(m_pGpiMap + GPPUD) = flags & 0x03;
     usleep(1); //Need to wait 150 cycles which is 0.6us on the slowest RPi so let's wait 1us
-    *(m_pGpiMap + 38 + (gpi / 32)) = 1 << (gpi % 32);
+    *(m_pGpiMap + GPPUDCLK0 + (gpi / 32)) = 1 << (gpi % 32);
     usleep(1); //Need to wait 150 cycles which is 0.6us on the slowest RPi so let's wait 1us
-    *(m_pGpiMap + 37) = 0;
-    *(m_pGpiMap + 38 + (gpi /32)) = 0;
+    *(m_pGpiMap + GPPUD) = 0;
+    *(m_pGpiMap + GPPUDCLK0 + (gpi /32)) = 0;
     return true;
-}
-
-std::string ribanRotaryEncoder::GetModel()
-{
-    int fd;
-    std::string sModel = "";
-    if((fd = open("/proc/device-tree/model", O_RDONLY) ) < 0)
-    {
-        return std::string("Unknown");
-    }
-    char c;
-    while(read(fd, &c, 1) > 0)
-        sModel += c;
-    close(fd);
-    return sModel;
-}
-
-uint8_t ribanRotaryEncoder::GetModelNumber()
-{
-    std::string sModel = GetModel();
-    if(sModel.length() > 13)
-    {
-        uint8_t nModel = sModel[13] - 48; //!@todo Validate GetModelNumber works for each type of Raspberry Pi
-        if(nModel < 10)
-            return nModel;
-    }
-    return -1;
 }
 
 bool ribanRotaryEncoder::IsInit()
@@ -294,27 +268,21 @@ uint32_t ribanRotaryEncoder::GetMillis()
 
 bool ribanRotaryEncoder::initgpi()
 {
-    if((m_fdGpi = open("/dev/gpiomem", O_RDWR|O_SYNC) ) < 0) //!@todo Only root can access /dev/mem
-    {
-        printf("Error: Can't open /dev/gpiomem \n"); //!@todo Remove debug message
+    int fd;
+    if((fd = open("/dev/gpiomem", O_RDWR|O_SYNC) ) < 0)
         return false;
-    }
-
-    m_pMap = mmap(NULL, BLOCK_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, m_fdGpi, 0);
-    if(m_pMap == MAP_FAILED)
+    m_pMap = mmap(NULL, BLOCK_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    close(fd); //Don't need the file open after memory map
+    if(m_pMap != MAP_FAILED)
     {
-        printf("mmap error %d\n", (int)m_pMap);//!@todo Remove debug message
-        close(m_fdGpi);
-        return false;
+        m_pGpiMap = (volatile uint32_t *)m_pMap;
+        m_bUnInit = false;
     }
-    m_pGpiMap = (volatile uint32_t *)m_pMap;
-    m_bUnInit = false;
-    return true;
+    return m_bUnInit;
 }
 
 void ribanRotaryEncoder::uninitgpi()
 {
     munmap(m_pMap, BLOCK_SIZE);
-    close(m_fdGpi);
     m_bUnInit = true;
 }

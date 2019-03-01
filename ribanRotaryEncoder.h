@@ -9,7 +9,6 @@
 #pragma once
 
 #include <stdint.h> //Provides fixed length integer types
-#include <string> //Provides std::string
 
 //GOI modes
 #define GPI_INPUT           0x00
@@ -85,7 +84,7 @@ class ribanRotaryEncoder
         *   @note   Set to negative value to reverse rotation direction
         */
         void SetMultiplier(int32_t multiplier);
-        
+
         /** @brief  Get increment multiplier
         *   @retval int32_t Multiplier value
         */
@@ -120,16 +119,6 @@ class ribanRotaryEncoder
         */
         void SetGpi(uint8_t gpi, bool value);
 
-        /** @brief  Get the Raspberry Pi model description
-        *   @retval string Model description
-        */
-        std::string GetModel();
-
-        /** @brief  Get Raspberry Pi model number
-        *   @retval uint8_t Model number [0,1,2 or 0xFF for unknown]
-        */
-        uint8_t GetModelNumber();
-
         /** @brief  Is library initialised?
         *   @retval bool True if library is initialised
         */
@@ -160,7 +149,6 @@ class ribanRotaryEncoder
         int32_t m_lMultiplier; // Increment multiplier value
         int m_nLastButtonPress; // Time of last button press (for debounce)
         int m_nDebounce; // Quantity of milliseconds to ignore button after last press
-        int m_fdGpi; // File descriptor of GPI memory map
         void * m_pMap; // Memory map of GPI area
         volatile uint32_t * m_pGpiMap; //Pointer to GPI map
         bool m_bUnInit; // False when initialised
