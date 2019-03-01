@@ -17,12 +17,12 @@
 static const uint32_t GPIO_BASE_V1 = 0x20200000; // Physical base address of GPIO registers RPi V1
 static const uint32_t GPIO_BASE_V2 = 0x3F200000; // Physical base address of GPIO registers Rpi V2,V3
 static const int8_t anValid[16] = {0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0}; //Table of valid encoder states
-static const int8_t anUnavailableGpi[MAX_GPI] = {0,0,0,0,0,0,0,0,0,0,
+static const int8_t anUnavailableGpi[MAX_GPI] = {1,1,0,0,0,0,0,0,0,0,
                                                 0,0,0,0,0,0,0,0,0,0,
-                                                0,0,0,0,0,0,0,0,0,0,
-                                                0,0,0,0,0,0,0,0,0,0,
-                                                0,0,0,0,0,0,0,0,0,0,
-                                                0,0,0,0}; //Table of unavailable GPI pins
+                                                0,0,0,0,0,0,0,0,1,1,
+                                                1,1,1,1,1,1,1,1,1,1,
+                                                1,1,1,1,1,1,1,1,1,1,
+                                                1,1,1,1}; //Table of unavailable GPI pins
 
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 
