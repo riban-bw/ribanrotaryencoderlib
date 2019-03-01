@@ -233,19 +233,14 @@ bool ribanRotaryEncoder::ConfigureGpi(uint8_t gpi, uint8_t flags)
     if(m_bUnInit || gpi > MAX_GPI || anUnavailableGpi[gpi])
         return false;
     /*  There are 10 GPI configurations per register. Registers start at GPIO_BASE
-        Each configuration consists of three bits
-        Bits 1&2 are zero for GPI and bit 0 indicates direction
+        Each configuration consists of three bits defining mode
     */
-    //Configure GPI as input
+    //Clear configuration bits
     *(m_pGpiMap + (gpi / 10)) &= ~(7 << ((gpi % 10) * 3)); //reset 3 flags for this gpi
-
-    if(flags & GPI_OUTPUT)
-    {
-        *(m_pGpiMap + (gpi / 10)) |= (1 << ((gpi % 10) * 3)); //set first bit of flags for this gpi
-        return true;
-    }
+    //Set configuration bits to match requested mode
+    *(m_pGpiMap + (gpi / 10)) |= ((flags & 0x07) << ((gpi % 10) * 3)); //Configure for function
     //Set pull-up/down flags then clock into selected pin
-    *(m_pGpiMap + GPPUD) = flags & 0x03;
+    *(m_pGpiMap + GPPUD) = (flags & 0x18) >> 3;
     usleep(1); //Need to wait 150 cycles which is 0.6us on the slowest RPi so let's wait 1us
     *(m_pGpiMap + GPPUDCLK0 + (gpi / 32)) = 1 << (gpi % 32);
     usleep(1); //Need to wait 150 cycles which is 0.6us on the slowest RPi so let's wait 1us

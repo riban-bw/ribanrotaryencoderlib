@@ -10,11 +10,17 @@
 
 #include <stdint.h> //Provides fixed length integer types
 
-//GOI modes
+//GPI modes
 #define GPI_INPUT           0x00
-#define GPI_INPUT_PULLDOWN  0x01
-#define GPI_INPUT_PULLUP    0x02
-#define GPI_OUTPUT          0x04
+#define GPI_OUTPUT          0x01
+#define GPI_FN0             0x04
+#define GPI_FN1             0x05
+#define GPI_FN2             0x06
+#define GPI_FN3             0x07
+#define GPI_FN4             0x03
+#define GPI_FN5             0x02
+#define GPI_INPUT_PULLDOWN  0x08
+#define GPI_INPUT_PULLUP    0x10
 
 class ribanRotaryEncoder
 {
