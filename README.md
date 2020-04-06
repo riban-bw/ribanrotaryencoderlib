@@ -5,7 +5,7 @@ This C++ library provides an interface to a quadrature encoding rotary encoder u
 
 A rotary encoder will have three pins for the rotary encoding and possibly (probably) a further two for a switch operated by pushing the shaft. The switch is also handled by the library with debounce code. The common (usually the centre) pin should be wired to a 0V / ground point. The other two pins should be wired to GPI input pins. The library asserts the GPI pull-up resistors so no external components are required. A digital filter algorithm removes the need for debounce circuitry or code.
 
-The library provides an value that is increased and decreased by one each time the encoder passes from one indent to the next / previous. The value may be cleared to allow the encoder to be used as a simple up / down signal or the library's value may be used within the application code. The value can be range limited with minimum and maximum values. Incremental values can be scaled to allow larger value changes per step and negative scaling allows to reverse the rotation direction.
+The library provides a value that is increased and decreased by one each time the encoder passes from one indent to the next / previous. The value may be cleared to allow the encoder to be used as a simple up / down signal or the library's value may be used within the application code. The value can be range limited with minimum and maximum values. Incremental values can be scaled to allow larger value changes per step and negative scaling allows to reverse the rotation direction.
 
 A threshold may be set to allow fast rotation of the encoder to change the value by larger increments.
 
